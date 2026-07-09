@@ -1,0 +1,62 @@
+{
+  "manifest_version": 3,
+  "name": "Savega",
+  "version": "1.0.1",
+  "description": "Capture AI conversations locally and inject context into new sessions.",
+  "permissions": [
+    "storage",
+    "tabs",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "https://chatgpt.com/*",
+    "https://chat.openai.com/*",
+    "https://claude.ai/*",
+    "https://gemini.google.com/*",
+    "https://www.perplexity.ai/*",
+    "https://perplexity.ai/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*",
+        "https://claude.ai/*",
+        "https://gemini.google.com/*",
+        "https://www.perplexity.ai/*",
+        "https://perplexity.ai/*"
+      ],
+      "js": [
+        "src/platforms.js",
+        "src/stream-guard.js",
+        "src/message-extractor.js",
+        "src/mutation-watcher.js",
+        "src/idb-wrapper.js",
+        "src/compiler.js",
+        "src/tfidf.js",
+        "src/search-index.js",
+        "src/compressor.js",
+        "src/context-injector.js",
+        "src/new-session-detector.js",
+        "src/banner.js",
+        "src/licence.js",
+        "src/index.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "Savega"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

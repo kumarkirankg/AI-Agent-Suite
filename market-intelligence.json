@@ -1,0 +1,473 @@
+{
+  "name": "Market Intelligence",
+  "nodes": [
+    {
+      "id": "Sticky_Overview",
+      "name": "Sticky_Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        40,
+        40
+      ],
+      "parameters": {
+        "content": "MARKET INTELLIGENCE\\nInput: public data only (SEC EDGAR filings, free-tier news API).\\n3 steps: scan mentions, compare positioning, synthesize brief.\\nEach HTTP node retries 3x. Final brief is schema-validated, then an analyst approves via Discord before logging. AI never finalizes.",
+        "height": 200,
+        "width": 620,
+        "color": 4
+      }
+    },
+    {
+      "id": "Manual_Trigger",
+      "name": "Manual_Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        40,
+        300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "Define_Input",
+      "name": "Define_Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        300,
+        300
+      ],
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "Define_Input-0",
+              "name": "rawText",
+              "value": "={{$json.rawText}}",
+              "type": "string"
+            },
+            {
+              "id": "Define_Input-1",
+              "name": "source",
+              "value": "sec_edgar_and_news_api",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "Step1_Scan_Filings_News",
+      "name": "Step1_Scan_Filings_News",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        560,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{$env.ANTHROPIC_API_KEY}}"
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({model: 'claude-sonnet-4-6', max_tokens: 1500, messages: [{ role: 'user', content: 'Summarize competitor mentions from this public filing/news text. Return JSON only.\\n\\n' + $json.rawText }]}) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueErrorOutput",
+      "notes": "Retries 3x on failure (covers rate limits / transient API errors). See docs/decisions-and-tradeoffs.md."
+    },
+    {
+      "id": "Step2_Compare_Positioning",
+      "name": "Step2_Compare_Positioning",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        820,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{$env.ANTHROPIC_API_KEY}}"
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({model: 'claude-sonnet-4-6', max_tokens: 1500, messages: [{ role: 'user', content: 'Compare competitor positioning against our product on price, features, and market messaging. Return JSON only.\\n\\n' + JSON.stringify($json) }]}) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueErrorOutput",
+      "notes": "Retries 3x on failure (covers rate limits / transient API errors). See docs/decisions-and-tradeoffs.md."
+    },
+    {
+      "id": "Step3_Synthesize_Brief",
+      "name": "Step3_Synthesize_Brief",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1080,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{$env.ANTHROPIC_API_KEY}}"
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({model: 'claude-sonnet-4-6', max_tokens: 1500, messages: [{ role: 'user', content: 'Synthesize a competitive brief with 3-5 key findings and confidence levels. Return JSON only.\\n\\n' + JSON.stringify($json) }]}) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueErrorOutput",
+      "notes": "Retries 3x on failure (covers rate limits / transient API errors). See docs/decisions-and-tradeoffs.md."
+    },
+    {
+      "id": "MktIntel_Validate_Schema",
+      "name": "MktIntel_Validate_Schema",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "\nlet parsed, valid = true, reason = '';\ntry {\n  const text = $input.first().json.content?.[0]?.text || $input.first().json.body?.content?.[0]?.text || '{}';\n  parsed = JSON.parse(text);\n  if (!parsed.findings) { valid = false; reason = 'missing findings array'; }\n} catch (e) { valid = false; reason = 'invalid JSON: ' + e.message; parsed = null; }\nreturn [{ json: { valid, reason, brief: parsed } }];\n"
+      },
+      "notes": "Parses the last step's JSON, checks it against the expected schema, sets valid=true/false."
+    },
+    {
+      "id": "MktIntel_Schema_Valid",
+      "name": "MktIntel_Schema_Valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1600,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": ""
+          },
+          "conditions": [
+            {
+              "id": "MktIntel_Schema_Valid-cond",
+              "leftValue": "={{$json.valid}}",
+              "rightValue": "true",
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "MktIntel_Log_Validation_Failure",
+      "name": "MktIntel_Log_Validation_Failure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1860,
+        480
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return [{ json: { status: 'validation_failed', reason: $json.reason, timestamp: new Date().toISOString() } }];"
+      },
+      "notes": "Terminal node: 3 retries already happened at the HTTP Request level. This logs the final failure for manual review."
+    },
+    {
+      "id": "MktIntel_Notify_Reviewer",
+      "name": "MktIntel_Notify_Reviewer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1860,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.DISCORD_WEBHOOK_URL}}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ content: 'New competitive brief pending review: ' + JSON.stringify($json.brief).slice(0,300) }) }}"
+      },
+      "notes": "Posts the pending recommendation + the Wait node's resume URL to a free Discord webhook channel."
+    },
+    {
+      "id": "MktIntel_Wait_For_Approval",
+      "name": "MktIntel_Wait_For_Approval",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2120,
+        300
+      ],
+      "parameters": {
+        "resume": "webhook",
+        "webhookSuffix": "={{$workflow.id}}-MktIntel_Wait_For_Approval"
+      },
+      "webhookId": "MktIntel_Wait_For_Approval-webhook",
+      "notes": "Pauses here until the human reviewer's approve/reject click POSTs back to this node's webhook URL."
+    },
+    {
+      "id": "MktIntel_Approved",
+      "name": "MktIntel_Approved",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2380,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": ""
+          },
+          "conditions": [
+            {
+              "id": "MktIntel_Approved-cond",
+              "leftValue": "={{$json.body.decision}}",
+              "rightValue": "approve",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "MktIntel_Log_Rejected",
+      "name": "MktIntel_Log_Rejected",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        480
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return [{ json: { status: 'rejected_by_human', timestamp: new Date().toISOString() } }];"
+      }
+    },
+    {
+      "id": "MktIntel_Log_Approved_Output",
+      "name": "MktIntel_Log_Approved_Output",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        2640,
+        300
+      ],
+      "parameters": {
+        "operation": "write",
+        "fileName": "={{'/data/market-intelligence/output-' + Date.now() + '.json'}}",
+        "dataPropertyName": "data"
+      }
+    }
+  ],
+  "connections": {
+    "Manual_Trigger": {
+      "main": [
+        [
+          {
+            "node": "Define_Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Define_Input": {
+      "main": [
+        [
+          {
+            "node": "Step1_Scan_Filings_News",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Step1_Scan_Filings_News": {
+      "main": [
+        [
+          {
+            "node": "Step2_Compare_Positioning",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Step2_Compare_Positioning": {
+      "main": [
+        [
+          {
+            "node": "Step3_Synthesize_Brief",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Step3_Synthesize_Brief": {
+      "main": [
+        [
+          {
+            "node": "MktIntel_Validate_Schema",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MktIntel_Validate_Schema": {
+      "main": [
+        [
+          {
+            "node": "MktIntel_Schema_Valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MktIntel_Schema_Valid": {
+      "main": [
+        [
+          {
+            "node": "MktIntel_Notify_Reviewer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "MktIntel_Log_Validation_Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MktIntel_Notify_Reviewer": {
+      "main": [
+        [
+          {
+            "node": "MktIntel_Wait_For_Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MktIntel_Wait_For_Approval": {
+      "main": [
+        [
+          {
+            "node": "MktIntel_Approved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MktIntel_Approved": {
+      "main": [
+        [
+          {
+            "node": "MktIntel_Log_Approved_Output",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "MktIntel_Log_Rejected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "instanceId": "portfolio-ai-agent-suite"
+  }
+}

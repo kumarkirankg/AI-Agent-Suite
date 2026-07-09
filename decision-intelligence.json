@@ -1,0 +1,473 @@
+{
+  "name": "Decision Intelligence",
+  "nodes": [
+    {
+      "id": "Sticky_Overview",
+      "name": "Sticky_Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        40,
+        40
+      ],
+      "parameters": {
+        "content": "DECISION INTELLIGENCE\\nInput: the structured outputs of the other 3 agents (composition, not raw data).\\n3 steps: build scenarios, simulate outcomes, score and rank.\\nThe model is explicitly instructed never to pick a final answer -- it ranks options only.\\nA human decision-maker makes the actual call via the Discord approval gate.",
+        "height": 200,
+        "width": 620,
+        "color": 4
+      }
+    },
+    {
+      "id": "Manual_Trigger",
+      "name": "Manual_Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        40,
+        300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "Define_Input",
+      "name": "Define_Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        300,
+        300
+      ],
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "Define_Input-0",
+              "name": "upstreamOutputs",
+              "value": "={{$json.upstreamOutputs}}",
+              "type": "string"
+            },
+            {
+              "id": "Define_Input-1",
+              "name": "businessGoal",
+              "value": "={{$json.businessGoal}}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "Step1_Build_Scenarios",
+      "name": "Step1_Build_Scenarios",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        560,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{$env.ANTHROPIC_API_KEY}}"
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({model: 'claude-sonnet-4-6', max_tokens: 1500, messages: [{ role: 'user', content: 'Build 2-4 decision scenarios from these upstream agent outputs. Return JSON only.\\n\\n' + JSON.stringify($json.upstreamOutputs) }]}) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueErrorOutput",
+      "notes": "Retries 3x on failure (covers rate limits / transient API errors). See docs/decisions-and-tradeoffs.md."
+    },
+    {
+      "id": "Step2_Simulate_Outcomes",
+      "name": "Step2_Simulate_Outcomes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        820,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{$env.ANTHROPIC_API_KEY}}"
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({model: 'claude-sonnet-4-6', max_tokens: 1500, messages: [{ role: 'user', content: 'Simulate likely outcomes and tradeoffs for each scenario. Return JSON only.\\n\\n' + JSON.stringify($json) }]}) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueErrorOutput",
+      "notes": "Retries 3x on failure (covers rate limits / transient API errors). See docs/decisions-and-tradeoffs.md."
+    },
+    {
+      "id": "Step3_Score_And_Rank",
+      "name": "Step3_Score_And_Rank",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1080,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{$env.ANTHROPIC_API_KEY}}"
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({model: 'claude-sonnet-4-6', max_tokens: 1500, messages: [{ role: 'user', content: 'Score each scenario against the stated business goal and rank them. Return JSON only, do not pick a final answer.\\n\\n' + JSON.stringify($json) }]}) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueErrorOutput",
+      "notes": "Retries 3x on failure (covers rate limits / transient API errors). See docs/decisions-and-tradeoffs.md."
+    },
+    {
+      "id": "DecIntel_Validate_Schema",
+      "name": "DecIntel_Validate_Schema",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "\nlet parsed, valid = true, reason = '';\ntry {\n  const text = $input.first().json.content?.[0]?.text || $input.first().json.body?.content?.[0]?.text || '{}';\n  parsed = JSON.parse(text);\n  if (!parsed.scenarios) { valid = false; reason = 'missing scenarios array'; }\n} catch (e) { valid = false; reason = 'invalid JSON: ' + e.message; parsed = null; }\nreturn [{ json: { valid, reason, scenarios: parsed } }];\n"
+      },
+      "notes": "Parses the last step's JSON, checks it against the expected schema, sets valid=true/false."
+    },
+    {
+      "id": "DecIntel_Schema_Valid",
+      "name": "DecIntel_Schema_Valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1600,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": ""
+          },
+          "conditions": [
+            {
+              "id": "DecIntel_Schema_Valid-cond",
+              "leftValue": "={{$json.valid}}",
+              "rightValue": "true",
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "DecIntel_Log_Validation_Failure",
+      "name": "DecIntel_Log_Validation_Failure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1860,
+        480
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return [{ json: { status: 'validation_failed', reason: $json.reason, timestamp: new Date().toISOString() } }];"
+      },
+      "notes": "Terminal node: 3 retries already happened at the HTTP Request level. This logs the final failure for manual review."
+    },
+    {
+      "id": "DecIntel_Notify_Reviewer",
+      "name": "DecIntel_Notify_Reviewer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1860,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.DISCORD_WEBHOOK_URL}}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ content: 'New ranked scenarios pending decision: ' + JSON.stringify($json.scenarios).slice(0,300) }) }}"
+      },
+      "notes": "Posts the pending recommendation + the Wait node's resume URL to a free Discord webhook channel."
+    },
+    {
+      "id": "DecIntel_Wait_For_Approval",
+      "name": "DecIntel_Wait_For_Approval",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2120,
+        300
+      ],
+      "parameters": {
+        "resume": "webhook",
+        "webhookSuffix": "={{$workflow.id}}-DecIntel_Wait_For_Approval"
+      },
+      "webhookId": "DecIntel_Wait_For_Approval-webhook",
+      "notes": "Pauses here until the human reviewer's approve/reject click POSTs back to this node's webhook URL."
+    },
+    {
+      "id": "DecIntel_Approved",
+      "name": "DecIntel_Approved",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2380,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": ""
+          },
+          "conditions": [
+            {
+              "id": "DecIntel_Approved-cond",
+              "leftValue": "={{$json.body.decision}}",
+              "rightValue": "approve",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "DecIntel_Log_Rejected",
+      "name": "DecIntel_Log_Rejected",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        480
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return [{ json: { status: 'rejected_by_human', timestamp: new Date().toISOString() } }];"
+      }
+    },
+    {
+      "id": "DecIntel_Log_Approved_Output",
+      "name": "DecIntel_Log_Approved_Output",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        2640,
+        300
+      ],
+      "parameters": {
+        "operation": "write",
+        "fileName": "={{'/data/decision-intelligence/output-' + Date.now() + '.json'}}",
+        "dataPropertyName": "data"
+      }
+    }
+  ],
+  "connections": {
+    "Manual_Trigger": {
+      "main": [
+        [
+          {
+            "node": "Define_Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Define_Input": {
+      "main": [
+        [
+          {
+            "node": "Step1_Build_Scenarios",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Step1_Build_Scenarios": {
+      "main": [
+        [
+          {
+            "node": "Step2_Simulate_Outcomes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Step2_Simulate_Outcomes": {
+      "main": [
+        [
+          {
+            "node": "Step3_Score_And_Rank",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Step3_Score_And_Rank": {
+      "main": [
+        [
+          {
+            "node": "DecIntel_Validate_Schema",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DecIntel_Validate_Schema": {
+      "main": [
+        [
+          {
+            "node": "DecIntel_Schema_Valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DecIntel_Schema_Valid": {
+      "main": [
+        [
+          {
+            "node": "DecIntel_Notify_Reviewer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "DecIntel_Log_Validation_Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DecIntel_Notify_Reviewer": {
+      "main": [
+        [
+          {
+            "node": "DecIntel_Wait_For_Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DecIntel_Wait_For_Approval": {
+      "main": [
+        [
+          {
+            "node": "DecIntel_Approved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DecIntel_Approved": {
+      "main": [
+        [
+          {
+            "node": "DecIntel_Log_Approved_Output",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "DecIntel_Log_Rejected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "instanceId": "portfolio-ai-agent-suite"
+  }
+}

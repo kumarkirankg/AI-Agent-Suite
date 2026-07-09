@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MedPrep · EMMA Integration Concept</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #F8F9FB; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spin { display: inline-block; animation: spin 0.9s linear infinite; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script>
+    // ── PASTE YOUR CLOUDFLARE WORKER URL BELOW (between the quotes) ──────────
+    const WORKER_URL = "YOUR_WORKER_URL_HERE";
+    // ─────────────────────────────────────────────────────────────────────────
+  </script>
+
+  <script type="text/babel">
+    const { useState } = React;
+
+    const T = {
+      bgPage:      "#F8F9FB",
+      bgCard:      "#FFFFFF",
+      bgSecondary: "#F1F3F7",
+      bgDanger:    "#FEF2F2",
+      bgWarning:   "#FFFBEB",
+      bgSuccess:   "#F0FDF4",
+      bgInfo:      "#EFF6FF",
+      bdTertiary:  "#E2E6ED",
+      bdSecondary: "#D1D5DB",
+      bdDanger:    "#FECACA",
+      bdWarning:   "#FDE68A",
+      bdSuccess:   "#BBF7D0",
+      bdInfo:      "#BFDBFE",
+      txPrimary:   "#111827",
+      txSecondary: "#4B5563",
+      txTertiary:  "#9CA3AF",
+      txDanger:    "#DC2626",
+      txWarning:   "#B45309",
+      txSuccess:   "#15803D",
+      txInfo:      "#1D4ED8",
+      accentGreen: "#16A34A",
+      accentBlue:  "#2563EB",
+      radMd: "8px",
+      radLg: "12px",
+      font: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    };
+
+    const SAMPLE_QUERIES = [
+      {
+        label: "ACE inhibitor cough",
+        text: "I've been taking ramipril 5mg for two weeks now and I've developed a really persistent dry cough. Is this normal and should I stop taking it or carry on?"
+      },
+      {
+        label: "Ran out of BP tablets",
+        text: "I've run out of my amlodipine and can't get an appointment for three weeks. I've already missed two days of doses. Can I just stop taking it until I see the doctor or is that dangerous?"
+      },
+      {
+        label: "Child's fever not settling",
+        text: "My 8-year-old has had a temperature of 39.5 since last night. I gave calpol five hours ago but it hasn't come down much. How much ibuprofen can I give and is it safe to give both together?"
+      }
+    ];
+
+    const PRIORITY_CONFIG = {
+      urgent:    { label: "Urgent",    bg: T.bgDanger,  text: T.txDanger,  border: T.bdDanger,  icon: "⚠️" },
+      routine:   { label: "Routine",   bg: T.bgInfo,    text: T.txInfo,    border: T.bdInfo,    icon: "🕐" },
+      self_care: { label: "Self-care", bg: T.bgSuccess, text: T.txSuccess, border: T.bdSuccess, icon: "🌿" },
+    };
+
+    function SectionLabel({ children }) {
+      return (
+        <div style={{ fontSize: 11, fontWeight: 600, color: T.txTertiary, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 6 }}>
+          {children}
+        </div>
+      );
+    }
+
+    function Block({ children, style = {} }) {
+      return (
+        <div style={{ fontSize: 13, color: T.txPrimary, lineHeight: 1.65, background: T.bgSecondary, padding: "10px 12px", borderRadius: T.radMd, ...style }}>
+          {children}
+        </div>
+      );
+    }
+
+    function MedPrep() {
+      const [query, setQuery]     = useState("");
+      const [result, setResult]   = useState(null);
+      const [loading, setLoading] = useState(false);
+      const [error, setError]     = useState(null);
+
+      const analyzeQuery = async () => {
+        if (!query.trim() || loading) return;
+        setLoading(true);
+        setError(null);
+        setResult(null);
+
+        try {
+          const response = await fetch(WORKER_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              model: "claude-sonnet-4-6",
+              max_tokens: 1000,
+              system: `You are MedPrep, a clinical AI triage assistant integrated with EMMA — an NHS GP surgery AI receptionist. You analyse medication queries from patients and structure them for clinical review. You do NOT give clinical advice. You triage and pre-process so the right clinician gets the right information fast.
+
+Respond ONLY with a valid JSON object. No markdown, no backticks, no explanation outside the JSON:
+{
+  "priority": "urgent" | "routine" | "self_care",
+  "urgency_reason": "one clear sentence explaining the triage decision",
+  "summary_for_clinician": "2-3 sentence clinical note for the GP or pharmacist. Include medication names, stated symptoms, and key clinical flags. Written for a clinical reader.",
+  "patient_response_script": "Exactly what EMMA should say back to the patient. 2-3 warm, clear sentences. Do not give clinical advice. Tell them what will happen next and reassure them.",
+  "next_action": "The specific next step with a realistic timeframe. E.g. GP callback within 2 hours, pharmacist review same day, book routine appointment within 5 days.",
+  "key_flags": ["3 to 4 short clinical flags that a GP or pharmacist should note"],
+  "emma_resolves": true
+}`,
+              messages: [{ role: "user", content: `Patient medication query (from EMMA call transcript): "${query}"` }]
+            })
+          });
+
+          if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err?.error?.message || "Request failed");
+          }
+
+          const data = await response.json();
+          const text = data.content[0]?.text || "";
+          const clean = text.replace(/```json|```/g, "").trim();
+          const parsed = JSON.parse(clean);
+          setResult(parsed);
+        } catch (err) {
+          setError("Analysis failed — " + (err.message || "please try again."));
+          console.error(err);
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      const cfg = result ? (PRIORITY_CONFIG[result.priority] || PRIORITY_CONFIG.routine) : null;
+      const canSubmit = !loading && query.trim().length > 0;
+
+      return (
+        <div style={{ fontFamily: T.font, maxWidth: 680, margin: "0 auto", padding: "1.25rem 1rem", minHeight: "100vh" }}>
+
+          {/* Header */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.25rem", flexWrap: "wrap", gap: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{ width: 36, height: 36, borderRadius: T.radMd, background: T.bgSuccess, border: `1px solid ${T.bdSuccess}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>
+                💊
+              </div>
+              <div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: T.txPrimary, lineHeight: 1.3 }}>MedPrep</div>
+                <div style={{ fontSize: 11, color: T.txTertiary }}>Medication intelligence layer · EMMA integration concept</div>
+              </div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 5, background: T.bgSuccess, border: `1px solid ${T.bdSuccess}`, borderRadius: T.radMd, padding: "5px 11px" }}>
+              <span style={{ fontSize: 11, color: T.txSuccess, fontWeight: 600 }}>🔌 EMMA integration ready</span>
+            </div>
+          </div>
+
+          {/* Concept note */}
+          <div style={{ background: T.bgCard, padding: "10px 14px", marginBottom: "1.25rem", borderRadius: `0 ${T.radMd} ${T.radMd} 0`, border: `1px solid ${T.bdTertiary}`, borderLeft: `3px solid ${T.accentGreen}` }}>
+            <p style={{ margin: 0, fontSize: 13, color: T.txSecondary, lineHeight: 1.65 }}>
+              EMMA handles every inbound patient call — but medication queries need clinical intelligence before reaching a GP or pharmacist.
+              MedPrep sits between EMMA's call transcript and the clinical handoff: it triages urgency, generates a structured note,
+              and scripts EMMA's response. No clinical advice is given — only structured pre-processing.
+            </p>
+          </div>
+
+          {/* Input card */}
+          <div style={{ background: T.bgCard, border: `1px solid ${T.bdTertiary}`, borderRadius: T.radLg, padding: "1rem 1.25rem", marginBottom: "1rem", boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
+            <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: T.txPrimary, marginBottom: 8 }}>
+              Patient call transcript
+            </label>
+            <textarea
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) analyzeQuery(); }}
+              placeholder="Type or paste any patient medication query here — or click a sample below..."
+              rows={4}
+              style={{ width: "100%", resize: "vertical", fontSize: 14, lineHeight: 1.6, color: T.txPrimary, background: T.bgSecondary, border: `1px solid ${T.bdSecondary}`, borderRadius: T.radMd, padding: "10px 12px", fontFamily: T.font, outline: "none" }}
+            />
+
+            <div style={{ marginTop: 10, marginBottom: 14 }}>
+              <span style={{ fontSize: 11, color: T.txTertiary, display: "block", marginBottom: 6, fontWeight: 500 }}>Sample queries to try</span>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {SAMPLE_QUERIES.map((q, i) => (
+                  <button key={i} onClick={() => setQuery(q.text)}
+                    style={{ fontSize: 12, padding: "4px 12px", cursor: "pointer", borderRadius: T.radMd, background: T.bgSecondary, border: `1px solid ${T.bdSecondary}`, color: T.txSecondary, fontFamily: T.font, fontWeight: 500 }}>
+                    › {q.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <button onClick={analyzeQuery} disabled={!canSubmit}
+              style={{ width: "100%", padding: "10px", borderRadius: T.radMd, fontSize: 14, fontWeight: 600, border: "none", background: canSubmit ? T.accentGreen : T.bdSecondary, color: canSubmit ? "#FFFFFF" : T.txTertiary, cursor: canSubmit ? "pointer" : "not-allowed", fontFamily: T.font, display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}>
+              {loading ? <><span className="spin">⏳</span> Analysing query…</> : "🧠 Analyse and triage"}
+            </button>
+          </div>
+
+          {/* Error */}
+          {error && (
+            <div style={{ background: T.bgDanger, border: `1px solid ${T.bdDanger}`, borderRadius: T.radMd, padding: "10px 14px", marginBottom: "1rem", fontSize: 13, color: T.txDanger, display: "flex", alignItems: "center", gap: 7 }}>
+              ⚠️ {error}
+            </div>
+          )}
+
+          {/* Output */}
+          {result && cfg && (
+            <div style={{ background: T.bgCard, border: `1px solid ${T.bdTertiary}`, borderRadius: T.radLg, padding: "1rem 1.25rem", boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 14px", background: cfg.bg, border: `1px solid ${cfg.border}`, borderRadius: T.radMd, marginBottom: "1.125rem" }}>
+                <span style={{ fontSize: 18, marginTop: 1, flexShrink: 0 }}>{cfg.icon}</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: cfg.text }}>{cfg.label}</div>
+                  <div style={{ fontSize: 12, color: T.txSecondary, marginTop: 2, lineHeight: 1.5 }}>{result.urgency_reason}</div>
+                </div>
+                {result.emma_resolves && (
+                  <span style={{ fontSize: 11, padding: "3px 10px", flexShrink: 0, fontWeight: 600, background: T.bgSuccess, color: T.txSuccess, border: `1px solid ${T.bdSuccess}`, borderRadius: T.radMd }}>
+                    EMMA resolves
+                  </span>
+                )}
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+                <div>
+                  <SectionLabel>🩺 Clinical summary for GP / pharmacist</SectionLabel>
+                  <Block>{result.summary_for_clinician}</Block>
+                </div>
+                <div>
+                  <SectionLabel>💬 EMMA response script</SectionLabel>
+                  <Block style={{ borderRadius: `0 ${T.radMd} ${T.radMd} 0`, borderLeft: `3px solid ${T.accentGreen}`, fontStyle: "italic", color: T.txSecondary }}>
+                    "{result.patient_response_script}"
+                  </Block>
+                </div>
+                <div>
+                  <SectionLabel>→ Next action</SectionLabel>
+                  <Block style={{ fontWeight: 600, color: T.accentBlue, background: T.bgInfo, border: `1px solid ${T.bdInfo}` }}>
+                    {result.next_action}
+                  </Block>
+                </div>
+                <div>
+                  <SectionLabel>🚩 Key flags</SectionLabel>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    {result.key_flags?.map((flag, i) => (
+                      <span key={i} style={{ fontSize: 12, padding: "4px 12px", fontWeight: 600, background: T.bgWarning, color: T.txWarning, border: `1px solid ${T.bdWarning}`, borderRadius: T.radMd }}>
+                        {flag}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <p style={{ fontSize: 11, color: T.txTertiary, textAlign: "center", marginTop: "1.5rem", lineHeight: 1.6 }}>
+            Concept prototype · not for clinical use · designed to complement EMMA by QuantumLoopAI · built with Claude API
+          </p>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<MedPrep />);
+  </script>
+</body>
+</html>
