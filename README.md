@@ -1,6 +1,6 @@
 # AI Agent Suite
 
-Four multi-step analytical agents built on [n8n]((https://kirankg.app.n8n.cloud/form/requirements-intelligence) (free, self-hosted Community Edition), each backed by Claude. Every agent follows the same architecture pattern: pull public data → run a multi-step LLM pipeline → validate the structured output → route through a **human approval gate** → log the result. The AI never finalizes a decision on its own.
+Four multi-step analytical agents built on [n8n](https://kirankg.app.n8n.cloud/form/requirements-intelligence) (free, self-hosted Community Edition), each backed by Claude. Every agent follows the same architecture pattern: pull public data → run a multi-step LLM pipeline → validate the structured output → route through a **human approval gate** → log the result. The AI never finalizes a decision on its own.
 
 This project exists to demonstrate requirements thinking, system design, and responsible-AI judgment for Business Analyst / Product Owner / AI Product Owner roles — the design decisions matter more here than the code.
 
