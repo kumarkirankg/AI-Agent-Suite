@@ -1,6 +1,6 @@
 # AI Agent Suite
 
-Four multi-step analytical agents built on [n8n](https://n8n.io) (free, self-hosted Community Edition), each backed by Claude. Every agent follows the same architecture pattern: pull public data → run a multi-step LLM pipeline → validate the structured output → route through a **human approval gate** → log the result. The AI never finalizes a decision on its own.
+Four multi-step analytical agents built on [n8n]([https://n8n.io](https://kirankg.app.n8n.cloud/form/requirements-intelligence)) (free, self-hosted Community Edition), each backed by Claude. Every agent follows the same architecture pattern: pull public data → run a multi-step LLM pipeline → validate the structured output → route through a **human approval gate** → log the result. The AI never finalizes a decision on its own.
 
 This project exists to demonstrate requirements thinking, system design, and responsible-AI judgment for Business Analyst / Product Owner / AI Product Owner roles — the design decisions matter more here than the code.
 
@@ -65,7 +65,7 @@ ai-agent-suite/
 
 1. `docker run -it --rm --name n8n -p 5678:5678 -v n8n_data:/home/node/.n8n docker.n8n.io/n8nio/n8n`
 2. Open `http://localhost:5678`, import any file from `workflows/` (Menu → Import from File).
-3. Set environment variables: `ANTHROPIC_API_KEY`, `DISCORD_WEBHOOK_URL` (a free Discord channel webhook works fine).
+3. Set environment variables: `GOOGLE_API_KEY`, `DISCORD_WEBHOOK_URL` (a free Discord channel webhook works fine).
 4. Each workflow starts from a Manual Trigger — set your input fields in the `Define_Input` node and execute.
 
 **Note:** these workflows are a real, importable scaffold, not a plug-and-play product — node parameter names shift slightly across n8n versions, so verify each `HTTP Request` and `Wait` node's config against your installed version before running for real. See `docs/decisions-and-tradeoffs.md` for what's deliberately simplified and why.
